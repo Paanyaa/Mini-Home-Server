@@ -8,6 +8,7 @@ public class ClientHandler implements Runnable {
         private static final String KEY = "1234567890123456";
         private static final String STORAGE = "server_storage";
         private static final int BUFFER = 4096;
+	private long transfered = 1;
 
         private Socket socket;
 
@@ -116,7 +117,7 @@ public class ClientHandler implements Runnable {
         private void uploadFile(DataInputStream in , String username, String userDir) throws Exception {
 
                 String name = in.readUTF();
-                in.readLong();
+                long totalBytes = in.readLong();
 
                 FileOutputStream fos = new FileOutputStream(userDir + "/" + name);
 
@@ -139,6 +140,9 @@ public class ClientHandler implements Runnable {
 
                         if (dec != null)
                                 fos.write(dec);
+				transfered += dec.length;
+
+			System.out.print("\r Upload progress : " + (int)((transfered * 100) / totalBytes));
                 }
 
                 byte[] finalDec = decCipher.doFinal();
@@ -148,7 +152,7 @@ public class ClientHandler implements Runnable {
 
                 fos.close();
 
-                System.out.println(username + " uploaded " + name);
+                System.out.println("\n" + username + " uploaded " + name);
         }
 
         private void listFiles(DataOutputStream out, String userDir) throws Exception {
@@ -167,52 +171,52 @@ public class ClientHandler implements Runnable {
                 for (File f: files)
                         out.writeUTF(f.getName());
         }
+private void downloadFile(DataInputStream in , DataOutputStream out, String userDir) throws Exception {
 
-        private void downloadFile(DataInputStream in , DataOutputStream out, String userDir) throws Exception {
+    String fname = in.readUTF();   // ✅ read filename first
 
-                String fname = in.readUTF();
+    File file = new File(userDir + "/" + fname);
 
-                File file = new File(userDir + "/" + fname);
+    if (!file.exists()) {
+        out.writeLong(-1);
+        return;
+    }
 
-                if (!file.exists()) {
+    long totalBytes = file.length();
+    long transferred = 0;
 
-                        out.writeLong(-1);
-                        return;
-                }
+    out.writeLong(totalBytes);     // ✅ send file size
 
-                out.writeLong(file.length());
+    Cipher cipher = Cipher.getInstance("AES");
+    SecretKeySpec encKey = new SecretKeySpec(KEY.getBytes(), "AES");
+    cipher.init(Cipher.ENCRYPT_MODE, encKey);
 
-                Cipher cipher = Cipher.getInstance("AES");
-                SecretKeySpec encKey = new SecretKeySpec(KEY.getBytes(), "AES");
+    FileInputStream fis = new FileInputStream(file);
+    byte[] buffer = new byte[BUFFER];
+    int bytes;
 
-                cipher.init(Cipher.ENCRYPT_MODE, encKey);
+    while ((bytes = fis.read(buffer)) != -1) {
+        byte[] enc = cipher.update(buffer, 0, bytes);
+        if (enc != null) {
+            out.writeInt(enc.length);
+            out.write(enc);
+            transferred += enc.length;
+            int percent = (int)((transferred * 100) / totalBytes);
+            System.out.print("\rServer sending " + percent + "%");
+        }
+    }
 
-                FileInputStream fis = new FileInputStream(file);
+    byte[] finalEnc = cipher.doFinal();
+    if (finalEnc != null) {
+        out.writeInt(finalEnc.length);
+        out.write(finalEnc);
+        transferred += finalEnc.length;
+    }
 
-                byte[] buffer = new byte[BUFFER];
-                int bytes;
+    out.writeInt(-1);
+    fis.close();
 
-                while ((bytes = fis.read(buffer)) != -1) {
-
-                        byte[] enc = cipher.update(buffer, 0, bytes);
-
-                        if (enc != null) {
-
-                                out.writeInt(enc.length);
-                                out.write(enc);
-                        }
-                }
-
-                byte[] finalEnc = cipher.doFinal();
-
-                if (finalEnc != null) {
-
-                        out.writeInt(finalEnc.length);
-                        out.write(finalEnc);
-                }
-
-                out.writeInt(-1);
-
-                fis.close();
-	}
+    System.out.println("\rServer sending 100%");
+    System.out.println("File transfer complete.");
+}
 }
