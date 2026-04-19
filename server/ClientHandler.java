@@ -5,214 +5,214 @@ import java.net.Socket;
 
 public class ClientHandler implements Runnable {
 
-    private static final String KEY = "1234567890123456";
-    private static final String STORAGE = "server_storage";
-    private static final int BUFFER = 4096;
+        private static final String KEY = "1234567890123456";
+        private static final String STORAGE = "server_storage";
+        private static final int BUFFER = 4096;
 
-    private Socket socket;
+        private Socket socket;
 
-    public ClientHandler(Socket socket) {
-        this.socket = socket;
-    }
+        public ClientHandler(Socket socket) {
+                this.socket = socket;
+        }
 
-    public void run() {
+        public void run() {
 
-        String username = null;
-        boolean counted = false;   // FIX: track if client was counted
+                String username = null;
+                boolean counted = false; // FIX: track if client was counted
 
-        try {
+                try {
 
-            DataInputStream in =
-                    new DataInputStream(socket.getInputStream());
+                        DataInputStream in =
+                                new DataInputStream(socket.getInputStream());
 
-            DataOutputStream out =
-                    new DataOutputStream(socket.getOutputStream());
+                        DataOutputStream out =
+                                new DataOutputStream(socket.getOutputStream());
 
-            int action = in.readInt();
+                        int action = in.readInt();
 
-            String user = in.readUTF();
-            String pass = in.readUTF();
+                        String user = in.readUTF();
+                        String pass = in.readUTF();
 
-            if (action == 1) {
+                        if (action == 1) {
 
-                if (!AuthManager.authenticate(user, pass)) {
+                                if (!AuthManager.authenticate(user, pass)) {
 
-                    out.writeBoolean(false);
-                    socket.close();
-                    return;
-                }
+                                        out.writeBoolean(false);
+                                        socket.close();
+                                        return;
+                                }
 
-            } else if (action == 2) {
+                        } else if (action == 2) {
 
-                if (AuthManager.userExists(user)) {
+                                if (AuthManager.userExists(user)) {
 
-                    out.writeBoolean(false);
-                    socket.close();
-                    return;
-                }
+                                        out.writeBoolean(false);
+                                        socket.close();
+                                        return;
+                                }
 
-                AuthManager.addUser(user, pass);
-            }
+                                AuthManager.addUser(user, pass);
+                        }
 
-            username = user;
-            out.writeBoolean(true);
+                        username = user;
+                        out.writeBoolean(true);
 
-            synchronized (Server.class) {
-                Server.currentClients++;
-                counted = true;   // mark as counted
-            }
+                        synchronized(Server.class) {
+                                Server.currentClients++;
+                                counted = true; // mark as counted
+                        }
 
-            System.out.println("[CONNECTED] " + username);
-            System.out.println("Active clients: " + Server.currentClients);
+                        System.out.println("[CONNECTED] " + username);
+                        System.out.println("Active clients: " + Server.currentClients);
 
-            String userDir = STORAGE + "/" + username;
-            new File(userDir).mkdirs();
+                        String userDir = STORAGE + "/" + username;
+                        new File(userDir).mkdirs();
 
-            while (true) {
+                        while (true) {
 
-                int option = in.readInt();
+                                int option = in.readInt();
 
-                switch (option) {
+                                switch (option) {
 
-                    case 1:
-                        uploadFile(in, username, userDir);
-                        break;
+                                case 1:
+                                        uploadFile(in, username, userDir);
+                                        break;
 
-                    case 2:
-                        listFiles(out, userDir);
-                        break;
+                                case 2:
+                                        listFiles(out, userDir);
+                                        break;
 
-                    case 3:
-                        downloadFile(in, out, userDir);
-                        break;
+                                case 3:
+                                        downloadFile(in, out, userDir);
+                                        break;
 
-                    case 4:
+                                case 4:
+                                        System.out.println("[DISCONNECTED] " + username);
+                                        socket.close();
+                                        return;
+                                }
+                        }
+
+                } catch (Exception e) {
+
                         System.out.println("[DISCONNECTED] " + username);
-                        socket.close();
+                } finally {
+
+                        try {
+                                socket.close();
+                        } catch (Exception ignored) {}
+
+                        synchronized(Server.class) {
+
+                                if (counted) { // FIX: only decrement if counted
+                                        Server.currentClients--;
+                                }
+
+                                System.out.println("Active clients: " + Server.currentClients);
+                        }
+                }
+        }
+
+        private void uploadFile(DataInputStream in , String username, String userDir) throws Exception {
+
+                String name = in.readUTF();
+                in.readLong();
+
+                FileOutputStream fos = new FileOutputStream(userDir + "/" + name);
+
+                Cipher decCipher = Cipher.getInstance("AES");
+                SecretKeySpec key = new SecretKeySpec(KEY.getBytes(), "AES");
+
+                decCipher.init(Cipher.DECRYPT_MODE, key);
+
+                while (true) {
+
+                        int len = in.readInt();
+
+                        if (len == -1)
+                                break;
+
+                        byte[] enc = new byte[len];
+                        in.readFully(enc);
+
+                        byte[] dec = decCipher.update(enc);
+
+                        if (dec != null)
+                                fos.write(dec);
+                }
+
+                byte[] finalDec = decCipher.doFinal();
+
+                if (finalDec != null)
+                        fos.write(finalDec);
+
+                fos.close();
+
+                System.out.println(username + " uploaded " + name);
+        }
+
+        private void listFiles(DataOutputStream out, String userDir) throws Exception {
+
+                File folder = new File(userDir);
+                File[] files = folder.listFiles();
+
+                if (files == null || files.length == 0) {
+
+                        out.writeInt(0);
                         return;
                 }
-            }
 
-        } catch (Exception e) {
+                out.writeInt(files.length);
 
-            System.out.println("[DISCONNECTED] " + username);
+                for (File f: files)
+                        out.writeUTF(f.getName());
         }
 
-        finally {
+        private void downloadFile(DataInputStream in , DataOutputStream out, String userDir) throws Exception {
 
-            try { socket.close(); } catch (Exception ignored) {}
+                String fname = in.readUTF();
 
-            synchronized (Server.class) {
+                File file = new File(userDir + "/" + fname);
 
-                if (counted) {     // FIX: only decrement if counted
-                    Server.currentClients--;
+                if (!file.exists()) {
+
+                        out.writeLong(-1);
+                        return;
                 }
 
-                System.out.println("Active clients: " + Server.currentClients);
-            }
-        }
-    }
+                out.writeLong(file.length());
 
-    private void uploadFile(DataInputStream in, String username, String userDir) throws Exception {
+                Cipher cipher = Cipher.getInstance("AES");
+                SecretKeySpec encKey = new SecretKeySpec(KEY.getBytes(), "AES");
 
-        String name = in.readUTF();
-        in.readLong();
+                cipher.init(Cipher.ENCRYPT_MODE, encKey);
 
-        FileOutputStream fos = new FileOutputStream(userDir + "/" + name);
+                FileInputStream fis = new FileInputStream(file);
 
-        Cipher decCipher = Cipher.getInstance("AES");
-        SecretKeySpec key = new SecretKeySpec(KEY.getBytes(), "AES");
+                byte[] buffer = new byte[BUFFER];
+                int bytes;
 
-        decCipher.init(Cipher.DECRYPT_MODE, key);
+                while ((bytes = fis.read(buffer)) != -1) {
 
-        while (true) {
+                        byte[] enc = cipher.update(buffer, 0, bytes);
 
-            int len = in.readInt();
+                        if (enc != null) {
 
-            if (len == -1)
-                break;
+                                out.writeInt(enc.length);
+                                out.write(enc);
+                        }
+                }
 
-            byte[] enc = new byte[len];
-            in.readFully(enc);
+                byte[] finalEnc = cipher.doFinal();
 
-            byte[] dec = decCipher.update(enc);
+                if (finalEnc != null) {
 
-            if (dec != null)
-                fos.write(dec);
-        }
+                        out.writeInt(finalEnc.length);
+                        out.write(finalEnc);
+                }
 
-        byte[] finalDec = decCipher.doFinal();
+                out.writeInt(-1);
 
-        if (finalDec != null)
-            fos.write(finalDec);
-
-        fos.close();
-
-        System.out.println(username + " uploaded " + name);
-    }
-
-    private void listFiles(DataOutputStream out, String userDir) throws Exception {
-
-        File folder = new File(userDir);
-        File[] files = folder.listFiles();
-
-        if (files == null || files.length == 0) {
-
-            out.writeInt(0);
-            return;
-        }
-
-        out.writeInt(files.length);
-
-        for (File f : files)
-            out.writeUTF(f.getName());
-    }
-
-    private void downloadFile(DataInputStream in, DataOutputStream out, String userDir) throws Exception {
-
-        String fname = in.readUTF();
-
-        File file = new File(userDir + "/" + fname);
-
-        if (!file.exists()) {
-
-            out.writeLong(-1);
-            return;
-        }
-
-        out.writeLong(file.length());
-
-        Cipher cipher = Cipher.getInstance("AES");
-        SecretKeySpec encKey = new SecretKeySpec(KEY.getBytes(), "AES");
-
-        cipher.init(Cipher.ENCRYPT_MODE, encKey);
-
-        FileInputStream fis = new FileInputStream(file);
-
-        byte[] buffer = new byte[BUFFER];
-        int bytes;
-
-        while ((bytes = fis.read(buffer)) != -1) {
-
-            byte[] enc = cipher.update(buffer, 0, bytes);
-
-            if (enc != null) {
-
-                out.writeInt(enc.length);
-                out.write(enc);
-            }
-        }
-
-        byte[] finalEnc = cipher.doFinal();
-
-        if (finalEnc != null) {
-
-            out.writeInt(finalEnc.length);
-            out.write(finalEnc);
-        }
-
-        out.writeInt(-1);
-
-        fis.close();
-    }
+                fis.close();
+	}
 }
