@@ -1,75 +1,91 @@
 import java.io.*;
 import java.security.MessageDigest;
+import java.util.*;
+import java.net.Socket;
 
 public class AuthManager {
+    private static final String USER_FILE = "users.txt";
+    private static final Set<String> activeUsers = new HashSet<>();
+    private static final Map<String, Socket> activeSocket = new HashMap<>();
 
-    private static final String FILE = "users.txt";
+    private static String hashPassword(String password) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hashedBytes = digest.digest(password.getBytes());
+        StringBuilder sb = new StringBuilder();
 
-    // Hash password using SHA-256
-    private static String hash(String input) throws Exception {
-
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-
-        byte[] hashBytes = md.digest(input.getBytes());
-
-        StringBuilder hex = new StringBuilder();
-
-        for (byte b : hashBytes) {
-            hex.append(String.format("%02x", b));
+        for (byte b : hashedBytes) {
+            sb.append(String.format("%02x", b));
         }
-
-        return hex.toString();
+        return sb.toString();
     }
 
-    // Authenticate user
-    public static boolean authenticate(String user, String pass) throws Exception {
-
-        BufferedReader br = new BufferedReader(new FileReader(FILE));
-        String line;
-
-        String hashed = hash(pass);
-
-        while ((line = br.readLine()) != null) {
-
-            String[] parts = line.split(":");
-
-            if (parts[0].equals(user) && parts[1].equals(hashed)) {
-                br.close();
-                return true;
+    public static boolean authenticate(String username, String password) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader(USER_FILE))) {
+            String hashedPassword = hashPassword(password);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(":");
+                if (parts[0].equals(username) && parts[1].equals(hashedPassword)) {
+                    return true;
+                }
             }
         }
-
-        br.close();
         return false;
     }
 
-    // Check if user already exists
-    public static boolean userExists(String user) throws Exception {
-
-        BufferedReader br = new BufferedReader(new FileReader(FILE));
-        String line;
-
-        while ((line = br.readLine()) != null) {
-
-            if (line.split(":")[0].equals(user)) {
-                br.close();
-                return true;
+    public static boolean userExists(String username) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader(USER_FILE))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.split(":")[0].equals(username)) {
+                    return true;
+                }
             }
         }
-
-        br.close();
         return false;
     }
 
-    // Add new user with hashed password
-    public static void addUser(String user, String pass) throws Exception {
+    public static void addUser(String username, String password) throws Exception {
+        try (FileWriter writer = new FileWriter(USER_FILE, true)) {
+            String hashedPassword = hashPassword(password);
+            writer.write(username + ":" + hashedPassword + "\n");
+        }
+    }
 
-        FileWriter fw = new FileWriter(FILE, true);
+    public static boolean activeUsers(String username) {
+        synchronized (activeUsers) {
+            if (activeUsers.contains(username)) {
+                System.out.println("User " + username + " already logged in.");
+                return false;
+            } else {
+                activeUsers.add(username);
+                return true;
+            }
+        }
+    }
 
-        String hashed = hash(pass);
+    public static void inactiveUsers(String username) {
+        synchronized (activeUsers) {
+            activeUsers.remove(username);
+        }
+    }
 
-        fw.write(user + ":" + hashed + "\n");
+    public static Set<String> getActiveUser() {
+        return Collections.unmodifiableSet(activeUsers);
+    }
 
-        fw.close();
+    public static void putActiveSocket(String username, Socket socket) {
+	    activeSocket.put(username, socket);
+    }
+
+    public static void deactivateSocket(String username) {
+	    try {
+	    	if (!activeSocket.containsKey(username)) System.out.println("No active user found"); 
+	    	Socket socket = activeSocket.get(username);
+	    	socket.close();
+	    } catch (IOException e) {
+		    System.out.println("Socket Error");
+	    }
     }
 }
+

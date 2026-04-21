@@ -65,7 +65,8 @@ public class FileTransfer {
         fis.close();
 
         System.out.println("\rUpload progress 100%");
-        System.out.println("Upload complete.");
+	double fileSize = (double)totalBytes / (1024 * 1024);
+        System.out.printf("Upload complete. File Size : %.2f mb%n.", fileSize);
     }
 
     // ---------------- LIST FILES ----------------
@@ -150,7 +151,8 @@ public class FileTransfer {
 
             fos.close();
             System.out.println("\rDownloading " + selected + ": 100%");
-            System.out.println("Download complete for " + selected);
+	    double fileSize = (double)size / (1024 * 1024);
+            System.out.printf("Upload complete for %s. File Size : %.2f mb%n.", selected, fileSize);
         }
     }
 }

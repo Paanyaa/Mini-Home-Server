@@ -43,6 +43,12 @@ public class ClientHandler implements Runnable {
                                         return;
                                 }
 
+				if (!AuthManager.activeUsers(user)) {
+				       socket.close();	
+					return;
+				}
+
+
                         } else if (action == 2) {
 
                                 if (AuthManager.userExists(user)) {
@@ -53,6 +59,7 @@ public class ClientHandler implements Runnable {
                                 }
 
                                 AuthManager.addUser(user, pass);
+				AuthManager.activeUsers(user);
                         }
 
                         username = user;
@@ -65,6 +72,7 @@ public class ClientHandler implements Runnable {
 
                         System.out.println("[CONNECTED] " + username);
                         System.out.println("Active clients: " + Server.currentClients);
+			AuthManager.putActiveSocket(username, socket);
 
                         String userDir = STORAGE + "/" + username;
                         new File(userDir).mkdirs();
@@ -90,12 +98,17 @@ public class ClientHandler implements Runnable {
                                 case 4:
                                         System.out.println("[DISCONNECTED] " + username);
                                         socket.close();
+					AuthManager.inactiveUsers(username);
                                         return;
                                 }
                         }
 
                 } catch (Exception e) {
-
+			try {
+				AuthManager.inactiveUsers(username);
+			} catch (Exception f) {
+				System.out.println("User error");
+			}
                         System.out.println("[DISCONNECTED] " + username);
                 } finally {
 
