@@ -42,6 +42,7 @@ public class Server {
 
         // Admin console runs immediately in main thread
         Scanner sc = new Scanner(System.in);
+	System.out.println("use \033[3mh\033[0m for help\n");
         while (true) {
             System.out.print("server> ");
             String cmd = sc.nextLine();
@@ -50,7 +51,7 @@ public class Server {
                 case "list":
                     System.out.println("[ADMIN] Active users: " + AuthManager.getActiveUser());
                     break;
-                case "clients":
+                case "no":
                     System.out.println("[ADMIN] Current clients: " + currentClients);
                     break;
 		case "kick":
@@ -59,6 +60,12 @@ public class Server {
 		    AuthManager.deactivateSocket(user);
 		    System.out.println("User [DISCONNECTED] : " + user);
 		    break;
+		case "h":
+		    System.out.println("1. \033[3mlist\033[0m to List connected client names.\n
+				    2. \033[3mno\033[0m to get number of clients connected.\n
+				    3. \033[3mkick\033[0m to kick a cilent.\n
+				    4. \033[3mexit\033[0m to shut server.\n");
+		    break;
 
                 case "exit":
                     System.out.println("[ADMIN] Shutting down server...");
@@ -66,7 +73,7 @@ public class Server {
                     System.exit(0);
                     break;
                 default:
-                    System.out.println("[ADMIN] Unknown command.");
+		    if(!cmd.isEmpty()) System.out.println("[ADMIN] Unknown command.");
             }
         }
     }

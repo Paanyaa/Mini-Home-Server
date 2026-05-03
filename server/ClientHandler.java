@@ -70,7 +70,9 @@ public class ClientHandler implements Runnable {
                                 counted = true; // mark as counted
                         }
 
+			System.out.print("server> ");
                         System.out.println("[CONNECTED] " + username);
+			System.out.print("server> ");
                         System.out.println("Active clients: " + Server.currentClients);
 			AuthManager.putActiveSocket(username, socket);
 
@@ -96,6 +98,7 @@ public class ClientHandler implements Runnable {
                                         break;
 
                                 case 4:
+					System.out.print("server> ");
                                         System.out.println("[DISCONNECTED] " + username);
                                         socket.close();
 					AuthManager.inactiveUsers(username);
@@ -109,6 +112,7 @@ public class ClientHandler implements Runnable {
 			} catch (Exception f) {
 				System.out.println("User error");
 			}
+			System.out.print("server> ");
                         System.out.println("[DISCONNECTED] " + username);
                 } finally {
 
@@ -122,6 +126,7 @@ public class ClientHandler implements Runnable {
                                         Server.currentClients--;
                                 }
 
+				System.out.print("server> ");
                                 System.out.println("Active clients: " + Server.currentClients);
                         }
                 }
